@@ -194,7 +194,7 @@ body{background:#08080c;color:#fff;transition:background .3s}
 .btnDanger{background:linear-gradient(135deg,#cc0044,#880033);color:#fff;border:none;border-radius:8px;padding:6px 12px;font-size:.75rem;font-weight:700;cursor:pointer;transition:.2s;margin-top:6px;width:100%}
 .btnDanger:hover{background:linear-gradient(135deg,#ff2d55,#c40030);transform:translateY(-1px);box-shadow:0 4px 15px rgba(204,0,68,.4)}
 
-/* CSS CHO MÀN HÌNH CHẶN F12 */
+/* CSS CHO MÀN HÌNH CHẶN */
 #blockOverlay{position:fixed;inset:0;z-index:999999;background:#000;color:#ff2d55;display:none;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:20px;font-family:monospace}
 #blockOverlay h1{font-size:2.5rem;margin-bottom:20px;text-shadow:0 0 10px #ff2d55}
 #blockOverlay p{font-size:1.1rem;color:#ff99b3;margin-bottom:10px;line-height:1.6}
@@ -204,7 +204,7 @@ body{background:#08080c;color:#fff;transition:background .3s}
 
 <div id="blockOverlay">
   <h1>🚫 TRUY CẬP BỊ CHẶN</h1>
-  <p>Hệ thống phát hiện bạn đang cố tình can thiệp hoặc xem mã nguồn (F12).</p>
+  <p>Hệ thống phát hiện bạn đang có hành vi spam hoặc can thiệp mã nguồn.</p>
   <p>Địa chỉ IP của bạn đã bị ghi nhận và chặn vĩnh viễn khỏi hệ thống.</p>
 </div>
 
@@ -442,7 +442,7 @@ body{background:#08080c;color:#fff;transition:background .3s}
       <button class="iconBtn menuBtn" onclick="toggleSidebar()">☰</button>
       <div class="title">ChatGPTDrak</div>
       
-      <!-- IP HIỂN THỊ Ở ĐÂY -->
+      <!-- IP HIỂN THỊ -->
       <div class="ip-badge" id="ipDisplay" style="font-size:.75rem;padding:6px 12px;background:rgba(0,204,68,.1);border:1px solid rgba(0,204,68,.3);border-radius:999px;color:#00ff88;font-weight:600;margin-left:10px;display:flex;align-items:center;gap:5px">
         <span style="display:inline-block;width:8px;height:8px;background:#00ff88;border-radius:50%;box-shadow:0 0 5px #00ff88;"></span>
         Đang lấy IP...
@@ -478,41 +478,53 @@ body{background:#08080c;color:#fff;transition:background .3s}
 
 <div id="toast"></div>
 <script>
-// ===== BẢO VỆ CHỐNG F12 VÀ CHẶN IP =====
+// ===== BẢO VỆ CHỐNG F12 VÀ CHẶN SPAM =====
+let msgTimes = [];
+const SPAM_LIMIT = 5;
+const SPAM_WINDOW = 3000; // 3 giây
+
 (function() {
   const isBlocked = localStorage.getItem('drak_blocked_ip');
   if (isBlocked === 'true') {
     document.getElementById('blockOverlay').style.display = 'flex';
-    document.body.innerHTML = ''; // Xóa sạch nội dung web
+    document.body.innerHTML = '';
     document.body.appendChild(document.getElementById('blockOverlay'));
-    throw new Error('IP Blocked'); // Dừng toàn bộ script
+    throw new Error('IP Blocked');
   }
 
-  function triggerBlock() {
+  window.triggerBlock = function() {
     localStorage.setItem('drak_blocked_ip', 'true');
     document.getElementById('blockOverlay').style.display = 'flex';
     document.body.innerHTML = '';
     document.body.appendChild(document.getElementById('blockOverlay'));
-  }
+  };
 
-  // Chặn chuột phải
   document.addEventListener('contextmenu', function(e) {
     e.preventDefault();
     triggerBlock();
   });
 
-  // Chặn phím tắt F12, Ctrl+Shift+I, Ctrl+Shift+J, Ctrl+U
   document.addEventListener('keydown', function(e) {
-    if (
-      e.key === 'F12' || 
+    if (e.key === 'F12' || 
       (e.ctrlKey && e.shiftKey && (e.key === 'I' || e.key === 'i' || e.key === 'J' || e.key === 'j')) ||
-      (e.ctrlKey && (e.key === 'U' || e.key === 'u'))
-    ) {
+      (e.ctrlKey && (e.key === 'U' || e.key === 'u'))) {
       e.preventDefault();
       triggerBlock();
     }
   });
 })();
+
+function checkSpam() {
+  const now = Date.now();
+  msgTimes.push(now);
+  msgTimes = msgTimes.filter(t => now - t <= SPAM_WINDOW);
+  
+  if (msgTimes.length >= SPAM_LIMIT) {
+    window.triggerBlock();
+    return true;
+  }
+  return false;
+}
 
 // ===== LẤY IP NGƯỜI DÙNG =====
 fetch('https://api.ipify.org?format=json')
@@ -524,7 +536,7 @@ fetch('https://api.ipify.org?format=json')
     document.getElementById('ipDisplay').innerHTML = '<span style="display:inline-block;width:8px;height:8px;background:#ffcc00;border-radius:50%;"></span> IP: Ẩn danh';
   });
 
-// ===== CÁC CODE CŨ =====
+// ===== API KEY =====
 const _p1 = "Z3NrXzBVWnRqb3ds";
 const _p2 = "dWc4czJPb2tPakZtV0dk";
 const _p3 = "eWIzRllVeWlnVklQRXVyZTliU3RQWVY1dVp5cjA=";
@@ -1030,6 +1042,10 @@ function stopRecording() {
 
 async function send() {
   if (sending) return;
+
+  // KIỂM TRA SPAM
+  if (checkSpam()) return;
+
   const input = document.getElementById('msgInput');
   const btn = document.getElementById('sendBtn');
   const text = input.value.trim();
@@ -1134,11 +1150,8 @@ async function send() {
           retries++;
           if (retries > maxRetries) throw new Error('Đã thử lại ' + maxRetries + ' lần nhưng vẫn bị giới hạn.');
           
-          toast('⚠️ Groq giới hạn tốc độ. Đang tự động thử lại sau ' + Math.ceil(waitTime) + 's...', 4000);
-          
-          if (typingRow) {
-             typingRow.innerHTML = '<div class="avatarMsg">B</div><div class="content"><div style="color:#ffcc00;font-size:.85rem;display:flex;align-items:center;gap:6px"><span class="spinner" style="display:inline-block;width:12px;height:12px;border:2px solid #ffcc00;border-top-color:transparent;border-radius:50%;animation:spin 1s linear infinite"></span> Đang đợi AI (Thử lại lần ' + retries + '/' + maxRetries + ')...</div></div>';
-          }
+          // Chỉ hiện toast nhỏ, không thay đổi giao diện chat
+          toast('⚠️ Groq giới hạn tốc độ. Đang tự động thử lại sau ' + Math.ceil(waitTime) + 's...', 3000);
           
           await new Promise(function(r){ setTimeout(r, waitTime * 1000); });
           continue;
