@@ -140,7 +140,6 @@ body{background:#08080c;color:#fff;transition:background .3s}
 .pkgInfo .pkgToken{font-size:.82rem;color:#ff99b3}
 .pkgPrice{font-size:1.15rem;color:#ff2d55;font-weight:800}
 .qrBox{text-align:center;padding:18px;background:rgba(255,255,255,.03);border-radius:14px;margin-top:16px;border:1px solid rgba(255,45,85,.15)}
-.qrBox img{width:250px;height:auto;max-width:100%;border-radius:10px}
 .qrAmount{font-size:1.7rem;color:#ff2d55;font-weight:900;margin:16px 0}
 .qrNote{font-size:.85rem;color:#ff99b3;margin-bottom:8px}
 .qrNote b{color:#fff}
@@ -448,16 +447,14 @@ body{background:#08080c;color:#fff;transition:background .3s}
 
 <div id="toast"></div>
 
-<script type="module">
-// NẠP SUPABASE SDK
-import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
-
-// CẤU HÌNH SUPABASE (ĐÃ ẨN KEY BẢO MẬT)
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+// CẤU HÌNH SUPABASE
 const SUPABASE_URL = "https://jatjwkbikmggopsvjrh.supabase.co";
 const SUPABASE_KEY = atob("ZXlKaGJHY2lPaUpJVXpJMU5pSXNJblI1Y0NJNklrcFhWQ0o5LmV5SnBjM01pT2lKemRYQmhZbUZ6WlNJc0luSmxaaUk2SW1waGRGcDNTMkpwYTIxblozRnZjSE4yYW5Kb0lpd2ljbTlzWlNJNkltRnViMjRpTENKcFlYUWlPakUzT1RJeU5EVTVOalVzSW1WNGNDSTZPakl4TURjNE1qRTVOalY5LkswV1dwQ0VVdjFyYmp0bERsSGhFZnJjZFJsWjRBWmxHQ1NZcjJUTVptZEU=");
-const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-// ===== 1. ANTI F12 & CHẶN IP =====
+// ANTI F12 & CHẶN IP
 (function() {
   const isBlocked = localStorage.getItem('drak_blocked_ip');
   if (isBlocked === 'true') { document.body.innerHTML = ''; document.body.appendChild(document.getElementById('blockOverlay')); document.getElementById('blockOverlay').style.display = 'flex'; throw new Error('IP Blocked'); }
@@ -466,34 +463,32 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
   document.addEventListener('keydown', e => { if (e.key === 'F12' || (e.ctrlKey && e.shiftKey && (e.key === 'I' || e.key === 'i' || e.key === 'J' || e.key === 'j')) || (e.ctrlKey && (e.key === 'U' || e.key === 'u'))) { e.preventDefault(); triggerBlock(); } });
 })();
 
-// ===== 2. LẤY IP =====
+// LẤY IP
 fetch('https://api.ipify.org?format=json').then(res => res.json()).then(data => { document.getElementById('ipDisplay').innerHTML = `<span style="display:inline-block;width:8px;height:8px;background:#00ff88;border-radius:50%;box-shadow:0 0 5px #00ff88;"></span> IP: ${data.ip}`; }).catch(() => { document.getElementById('ipDisplay').innerHTML = `<span style="display:inline-block;width:8px;height:8px;background:#ffcc00;border-radius:50%;"></span> IP: Ẩn danh`; });
 
-// ===== 3. CẤU HÌNH CHUNG =====
+// CẤU HÌNH CHUNG
 const API_KEY = atob("Z3NrX1puSVZlVTdFaWdUNndZQ2FBem1TOHo4TkFDSmhsTDlHMjVSVXRiUENZT1VGZXBzcjZQZ0o=");
 const API_URL = "https://api.groq.com/openai/v1/chat/completions";
 const MODEL = "qwen/qwen3.8-27b";
 const ADMIN_USER = atob("RGZuQTBoLk4=");
 const ADMIN_PASS = atob("QmFjaGRlcHphaTEyM0A=");
 
-// Hàm mã hóa Base64 an toàn (Xử lý tiếng Việt)
 function safeEncode(str) { return btoa(unescape(encodeURIComponent(str.trim()))); }
 
-// Tương tác Database (Supabase)
-const CloudDB = {
-  async get() {
-    try {
-      const { data, error } = await supabase.from('data').select('content').eq('id', 'main').single();
-      if (error) { console.error("Lỗi DB:", error); return null; }
-      return data.content;
-    } catch(e) { return null; }
-  },
-  async set(data) {
-    try {
-      await supabase.from('data').update({ content: data }).eq('id', 'main');
-    } catch(e) { console.error(e); }
-  }
-};
+// BIẾN TOÀN CỤC LƯU DỮ LIỆU (TỐC ĐỘ CAO)
+let currentUser = null;
+let chats = [];
+let activeChatId = null;
+let sending = false;
+let smartLevel = 0;
+let tokenMultiplier = 1;
+let attachData = null;
+let attachType = null;
+let mediaRecorder = null;
+let audioChunks = [];
+let isRecording = false;
+let modelOverride = null;
+let GLOBAL_DATA = null; // Lưu trữ dữ liệu tải từ Supabase
 
 const LocalDB = {
   chats: { get: u => JSON.parse(localStorage.getItem('drak_chats_'+u)||'[]'), set: (u,v)=>localStorage.setItem('drak_chats_'+u,JSON.stringify(v)) },
@@ -502,11 +497,30 @@ const LocalDB = {
   bgcolor: { get: ()=>localStorage.getItem('drak_bgcolor')||'#08080c', set: v=>localStorage.setItem('drak_bgcolor',v) }
 };
 
-let currentUser = null; let chats = []; let activeChatId = null; let sending = false;
-let smartLevel = 0; let tokenMultiplier = 1; let attachData = null; let attachType = null;
-let mediaRecorder = null; let audioChunks = []; let isRecording = false; let modelOverride = null;
+// HÀM ĐỒNG BỘ SUPABASE (TẢI 1 LẦN, CHẠY SIÊU NHANH)
+async function loadCloudData() {
+  try {
+    const { data, error } = await supabase.from('data').select('content').eq('id', 'main').single();
+    if (error) { console.error("Lỗi DB:", error); return null; }
+    GLOBAL_DATA = data.content;
+    if (!GLOBAL_DATA.users) GLOBAL_DATA.users = {};
+    if (!GLOBAL_DATA.orders) GLOBAL_DATA.orders = [];
+    // Tự động tạo Admin nếu chưa có
+    if (!GLOBAL_DATA.users[ADMIN_USER]) {
+      GLOBAL_DATA.users[ADMIN_USER] = { password: safeEncode(ADMIN_PASS), tokens: 999999999, isAdmin: true, createdAt: Date.now() };
+      await saveCloudData();
+    }
+    return GLOBAL_DATA;
+  } catch(e) { return null; }
+}
+async function saveCloudData() {
+  if (!GLOBAL_DATA) return;
+  try {
+    await supabase.from('data').update({ content: GLOBAL_DATA }).eq('id', 'main');
+  } catch(e) { console.error("Lỗi lưu:", e); }
+}
 
-// ===== 4. AUTH =====
+// AUTH (ĐỒNG BỘ TỨC THÌ)
 window.openAuth = function(which) { document.getElementById('modalOverlay').classList.add('show'); window.switchModal(which); };
 window.closeModal = function() { document.getElementById('modalOverlay').classList.remove('show'); document.getElementById('loginErr').classList.remove('show'); document.getElementById('regErr').classList.remove('show'); };
 window.switchModal = function(which) {
@@ -522,12 +536,12 @@ window.handleRegister = async function(e) {
   const p2 = document.getElementById('regPass2').value.trim();
   if (p !== p2) return showModalErr('regErr', 'Mật khẩu không khớp.');
   
-  const data = await CloudDB.get();
-  if (data === null) return showModalErr('regErr', 'Lỗi kết nối CSDL!');
-  if (data.users[u]) return showModalErr('regErr', 'Tên đã tồn tại.');
+  if (!GLOBAL_DATA) GLOBAL_DATA = await loadCloudData();
+  if (!GLOBAL_DATA) return showModalErr('regErr', 'Lỗi kết nối CSDL!');
+  if (GLOBAL_DATA.users[u]) return showModalErr('regErr', 'Tên đã tồn tại.');
   
-  data.users[u] = { password: safeEncode(p), createdAt: Date.now(), tokens: 1000, isAdmin: false };
-  await CloudDB.set(data);
+  GLOBAL_DATA.users[u] = { password: safeEncode(p), createdAt: Date.now(), tokens: 1000, isAdmin: false };
+  saveCloudData(); // Lưu ngầm
   
   alert('Đăng ký thành công! Đang tự động đăng nhập...');
   LocalDB.session.set(u); window.closeModal(); startApp(u);
@@ -538,16 +552,11 @@ window.handleLogin = async function(e) {
   const u = document.getElementById('loginUser').value.trim();
   const p = document.getElementById('loginPass').value.trim();
   
-  const data = await CloudDB.get();
-  if (data === null) return showModalErr('loginErr', 'Lỗi kết nối CSDL!');
+  if (!GLOBAL_DATA) GLOBAL_DATA = await loadCloudData();
+  if (!GLOBAL_DATA) return showModalErr('loginErr', 'Lỗi kết nối CSDL!');
   
-  if (!data.users[ADMIN_USER]) { 
-    data.users[ADMIN_USER] = { password: safeEncode(ADMIN_PASS), tokens: 999999999, isAdmin: true, createdAt: Date.now() }; 
-    await CloudDB.set(data); 
-  }
-  
-  if (!data.users[u]) return showModalErr('loginErr', `Tài khoản "${u}" không tồn tại.`);
-  if (safeEncode(p) !== data.users[u].password) return showModalErr('loginErr', 'Mật khẩu sai.');
+  if (!GLOBAL_DATA.users[u]) return showModalErr('loginErr', `Tài khoản "${u}" không tồn tại.`);
+  if (safeEncode(p) !== GLOBAL_DATA.users[u].password) return showModalErr('loginErr', 'Mật khẩu sai.');
   
   LocalDB.session.set(u); window.closeModal(); startApp(u);
 };
@@ -575,8 +584,8 @@ async function startApp(username) {
   document.getElementById('userName').textContent = username;
   document.getElementById('userAvatar').textContent = username[0].toUpperCase();
   
-  const data = await CloudDB.get();
-  if (data && data.users[username] && data.users[username].isAdmin) document.getElementById('adminBtn').classList.remove('hidden');
+  if (!GLOBAL_DATA) GLOBAL_DATA = await loadCloudData();
+  if (GLOBAL_DATA && GLOBAL_DATA.users[username] && GLOBAL_DATA.users[username].isAdmin) document.getElementById('adminBtn').classList.remove('hidden');
   else document.getElementById('adminBtn').classList.add('hidden');
   
   updateTokenUI(); renderHistory(); renderChat();
@@ -584,7 +593,14 @@ async function startApp(username) {
   setTimeout(() => document.getElementById('msgInput').focus(), 150);
 }
 
-// ===== 5. CÁC HÀM HỖ TRỢ =====
+function updateTokenUI() {
+  if (!GLOBAL_DATA || !GLOBAL_DATA.users[currentUser]) return;
+  const t = GLOBAL_DATA.users[currentUser].tokens || 0;
+  document.getElementById('userToken').textContent = t.toLocaleString() + ' token';
+  document.getElementById('hdrToken').textContent = t.toLocaleString();
+  document.getElementById('accToken').textContent = t.toLocaleString();
+}
+
 function createSnow() {
   const layer = document.getElementById('snowLayer');
   for (let i = 0; i < 40; i++) {
@@ -614,15 +630,6 @@ function countTokens(text) {
   return Math.round((lines * 50 + words * 15 + 100) * tokenMultiplier);
 }
 
-// ===== 6. QUẢN LÝ CHAT & GIAO DIỆN =====
-async function updateTokenUI() {
-  const data = await CloudDB.get();
-  if (!data || !data.users[currentUser]) return;
-  const t = data.users[currentUser].tokens || 0;
-  document.getElementById('userToken').textContent = t.toLocaleString() + ' token';
-  document.getElementById('hdrToken').textContent = t.toLocaleString();
-  document.getElementById('accToken').textContent = t.toLocaleString();
-}
 function genId() { return 'c_' + Date.now() + '_' + Math.random().toString(36).slice(2,8); }
 function createNewChatObj() { const chat = { id: genId(), title: 'Cuộc trò chuyện mới', createdAt: Date.now(), messages: [] }; chats.push(chat); activeChatId = chat.id; return chat; }
 function getActiveChat() { return chats.find(c => c.id === activeChatId); }
@@ -671,14 +678,14 @@ window.send = async function() {
   if (sending) return;
   const input = document.getElementById('msgInput'); const text = input.value.trim();
   if (!text && !attachData) return;
-  const data = await CloudDB.get(); if (!data || !data.users[currentUser]) return toast('Lỗi mạng!');
+  if (!GLOBAL_DATA || !GLOBAL_DATA.users[currentUser]) return toast('Lỗi mạng!');
   
   let tokensNeeded = countTokens(text);
   if (attachType === 'image') tokensNeeded += 800;
   if (attachType === 'audio') tokensNeeded += 1200;
-  if (data.users[currentUser].tokens < tokensNeeded) return document.getElementById('outTokenOverlay').classList.remove('hidden');
+  if (GLOBAL_DATA.users[currentUser].tokens < tokensNeeded) return document.getElementById('outTokenOverlay').classList.remove('hidden');
   
-  data.users[currentUser].tokens -= tokensNeeded; await CloudDB.set(data); updateTokenUI();
+  GLOBAL_DATA.users[currentUser].tokens -= tokensNeeded; saveCloudData(); updateTokenUI();
   const chat = getActiveChat(); const userMsg = { role:'user', content: text };
   if (attachType === 'image') userMsg.image = attachData;
   if (attachType === 'audio') userMsg.audio = attachData;
@@ -716,7 +723,6 @@ window.send = async function() {
   } finally { sending = false; document.getElementById('sendBtn').disabled = false; input.focus(); }
 };
 
-// ===== 7. CÁC HÀM KHÁC =====
 function updateSendBtn() { const btn = document.getElementById('sendBtn'); const hasText = document.getElementById('msgInput').value.trim().length > 0; btn.disabled = (!hasText && !attachData) || sending; }
 const msgInput = document.getElementById('msgInput');
 msgInput.addEventListener('input', () => { msgInput.style.height = 'auto'; msgInput.style.height = Math.min(msgInput.scrollHeight, 200) + 'px'; updateSendBtn(); });
@@ -726,6 +732,7 @@ function toggleSidebar() { const sb = document.getElementById('sidebar'); sb.cla
 function togglePlusMenu(e) { e.stopPropagation(); document.getElementById('plusMenu').classList.toggle('hidden'); }
 document.addEventListener('click', (e) => { if (!e.target.closest('.inputWrap')) { const p = document.getElementById('plusMenu'); if (p) p.classList.add('hidden'); } });
 
+// CÁC CHỨC NĂNG KHÁC
 function openShop() { document.getElementById('shopOverlay').classList.remove('hidden'); renderPackages(); }
 function closeShop() { document.getElementById('shopOverlay').classList.add('hidden'); }
 function renderPackages() {
@@ -738,52 +745,30 @@ function renderPackages() {
   });
 }
 let currentPkg = null;
-function openQR(pkg) {
-  currentPkg = pkg; closeShop(); document.getElementById('qrOverlay').classList.remove('hidden');
-  document.getElementById('qrTitle').textContent = pkg.name; document.getElementById('qrImg').src = ""; document.getElementById('qrAmount').textContent = pkg.price;
-}
+function openQR(pkg) { currentPkg = pkg; closeShop(); document.getElementById('qrOverlay').classList.remove('hidden'); document.getElementById('qrTitle').textContent = pkg.name; document.getElementById('qrAmount').textContent = pkg.price; }
 function closeQR() { document.getElementById('qrOverlay').classList.add('hidden'); currentPkg = null; }
-async function paidConfirm() { if (!currentPkg) return; const data = await CloudDB.get(); if (!data) return; data.orders.push({ id:'o_' + Date.now(), username: currentUser, pkgName: currentPkg.name, tokens: currentPkg.tokens, status: 'pending' }); await CloudDB.set(data); closeQR(); alert('Đã gửi đơn! Chờ Admin duyệt.'); }
+function paidConfirm() { if (!currentPkg) return; if(!GLOBAL_DATA) return; GLOBAL_DATA.orders.push({ id:'o_' + Date.now(), username: currentUser, pkgName: currentPkg.name, tokens: currentPkg.tokens, status: 'pending' }); saveCloudData(); closeQR(); alert('Đã gửi đơn! Chờ Admin duyệt.'); }
 function openAcc() { document.getElementById('accName').textContent = currentUser; updateTokenUI(); document.getElementById('accOverlay').classList.remove('hidden'); }
 function closeAcc() { document.getElementById('accOverlay').classList.add('hidden'); }
-function openSet() {
-  const list = document.getElementById('colorList'); list.innerHTML = '';
-  [{ name:'Đỏ đen', value:'#08080c' }, { name:'Đỏ tươi', value:'#1a0008' }, { name:'Tím đen', value:'#0d0014' }, { name:'Xanh đen', value:'#000a14' }].forEach(c => {
-    const btn = document.createElement('button'); btn.style.cssText = 'width:44px;height:44px;border-radius:50%;border:2px solid ' + (LocalDB.bgcolor.get() === c.value ? '#fff' : 'transparent') + ';background:' + c.value + ';cursor:pointer';
-    btn.onclick = () => { applyBgColor(c.value); LocalDB.bgcolor.set(c.value); openSet(); };
-    list.appendChild(btn);
-  });
-  document.getElementById('setOverlay').classList.remove('hidden');
-}
+function openSet() { document.getElementById('setOverlay').classList.remove('hidden'); }
 function closeSet() { document.getElementById('setOverlay').classList.add('hidden'); }
-function applyBgColor(color) { document.body.style.background = color; document.getElementById('mainArea').style.background = 'radial-gradient(circle at 50% 0%, ' + color + ', #050308 100%)'; document.getElementById('sidebar').style.background = 'linear-gradient(180deg, ' + color + ', #08080c)'; }
 function openQuick() { document.getElementById('quickOverlay').classList.add('show'); }
 function closeQuick() { document.getElementById('quickOverlay').classList.remove('show'); }
-function quickModel(id, el) { modelOverride = id; document.querySelectorAll('.quickModel').forEach(x => x.classList.remove('active')); el.classList.add('active'); toast('Đã chọn model: ' + id); }
+function quickModel(id, el) { modelOverride = id; document.querySelectorAll('.quickModel').forEach(x => x.classList.remove('active')); el.classList.add('active'); }
 function updateSlider(v) { smartLevel = parseFloat(v); document.getElementById('qSmartVal').textContent = smartLevel.toFixed(1); if (smartLevel <= 1) tokenMultiplier = 1; else if (smartLevel <= 3) tokenMultiplier = 2; else tokenMultiplier = 4; }
 function pickFile() { document.getElementById('plusMenu').classList.add('hidden'); document.getElementById('fileInput').click(); }
-function handleFileSelect(e) {
-  const file = e.target.files[0]; if (!file) return;
-  const reader = new FileReader();
-  reader.onload = (ev) => {
-    attachData = ev.target.result; attachType = file.type.indexOf('image/') === 0 ? 'image' : 'file';
-    document.getElementById('attachPreview').innerHTML = '<div class="previewBox">Đã đính kèm: ' + escapeHtml(file.name) + '</div>';
-    document.getElementById('attachPreview').style.display = 'block'; updateSendBtn();
-  };
-  reader.readAsDataURL(file); e.target.value = '';
-}
+function handleFileSelect(e) { const file = e.target.files[0]; if (!file) return; const reader = new FileReader(); reader.onload = (ev) => { attachData = ev.target.result; attachType = file.type.indexOf('image/') === 0 ? 'image' : 'file'; document.getElementById('attachPreview').innerHTML = '<div class="previewBox">Đã đính kèm: ' + escapeHtml(file.name) + '</div>'; document.getElementById('attachPreview').style.display = 'block'; updateSendBtn(); }; reader.readAsDataURL(file); e.target.value = ''; }
 function removeAttach() { attachData = null; attachType = null; document.getElementById('attachPreview').innerHTML = ''; document.getElementById('attachPreview').style.display = 'none'; updateSendBtn(); }
 function openCamera() { document.getElementById('plusMenu').classList.add('hidden'); navigator.mediaDevices.getUserMedia({ video: true }).then(stream => { document.getElementById('cameraVideo').srcObject = stream; document.getElementById('cameraOverlay').classList.remove('hidden'); }).catch(err => toast('Không mở được camera')); }
 function closeCamera() { const video = document.getElementById('cameraVideo'); if (video.srcObject) { video.srcObject.getTracks().forEach(t => t.stop()); video.srcObject = null; } document.getElementById('cameraOverlay').classList.add('hidden'); }
 function capturePhoto() { const video = document.getElementById('cameraVideo'); const canvas = document.getElementById('cameraCanvas'); canvas.width = video.videoWidth; canvas.height = video.videoHeight; canvas.getContext('2d').drawImage(video, 0, 0); attachData = canvas.toDataURL('image/jpeg', 0.8); attachType = 'image'; document.getElementById('attachPreview').innerHTML = '<div class="previewBox">Đã chụp ảnh!</div>'; document.getElementById('attachPreview').style.display = 'block'; closeCamera(); updateSendBtn(); }
 function toggleRecording() { document.getElementById('plusMenu').classList.add('hidden'); if (isRecording) { mediaRecorder.stop(); isRecording = false; document.getElementById('recordMenuItem').innerHTML = 'Ghi âm'; return; } navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => { mediaRecorder = new MediaRecorder(stream); audioChunks = []; mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) audioChunks.push(e.data); }; mediaRecorder.onstop = () => { const blob = new Blob(audioChunks, { type: 'audio/webm' }); const reader = new FileReader(); reader.onload = (ev) => { attachData = ev.target.result; attachType = 'audio'; document.getElementById('attachPreview').innerHTML = '<div class="previewBox">Đã ghi âm!</div>'; document.getElementById('attachPreview').style.display = 'block'; updateSendBtn(); }; reader.readAsDataURL(blob); stream.getTracks().forEach(t => t.stop()); }; mediaRecorder.start(); isRecording = true; document.getElementById('recordMenuItem').innerHTML = 'Dừng ghi âm'; }).catch(err => toast('Không mở được mic')); }
 
-// ===== 8. ADMIN =====
 function openAdmin() { document.getElementById('adminOverlay').classList.remove('hidden'); renderAdminData(); }
 function closeAdmin() { document.getElementById('adminOverlay').classList.add('hidden'); }
 async function renderAdminData() {
-  const data = await CloudDB.get(); if (!data) return;
-  const pending = data.orders.filter(o => o.status === 'pending');
+  if (!GLOBAL_DATA) return;
+  const pending = GLOBAL_DATA.orders.filter(o => o.status === 'pending');
   document.getElementById('orderCount').textContent = pending.length;
   const list = document.getElementById('orderList'); list.innerHTML = '';
   pending.forEach(o => {
@@ -792,20 +777,18 @@ async function renderAdminData() {
     list.appendChild(div);
   });
 }
-async function approveOrder(id) { const data = await CloudDB.get(); const order = data.orders.find(o => o.id === id); if (!order || !data.users[order.username]) return toast('Lỗi!'); data.users[order.username].tokens += order.tokens; order.status = 'approved'; await CloudDB.set(data); toast('Đã duyệt!'); renderAdminData(); }
-async function adminAddToken() { const target = document.getElementById('adminTargetUser').value.trim(); const amount = parseInt(document.getElementById('adminAddToken').value); if (!target || !amount) return toast('Nhập thiếu thông tin'); const data = await CloudDB.get(); if (!data.users[target]) return toast('Không tìm thấy user!'); data.users[target].tokens += amount; await CloudDB.set(data); toast('Đã cộng token!'); }
-async function adminChangePass() { const target = document.getElementById('adminChangeUser').value.trim(); const newP = document.getElementById('adminNewPass').value.trim(); if (!target || !newP) return toast('Nhập thiếu thông tin'); const data = await CloudDB.get(); if (!data.users[target]) return toast('Không tìm thấy user!'); data.users[target].password = safeEncode(newP); await CloudDB.set(data); toast('Đã đổi pass!'); }
+function approveOrder(id) { if(!GLOBAL_DATA) return; const order = GLOBAL_DATA.orders.find(o => o.id === id); if (!order || !GLOBAL_DATA.users[order.username]) return toast('Lỗi!'); GLOBAL_DATA.users[order.username].tokens += order.tokens; order.status = 'approved'; saveCloudData(); toast('Đã duyệt!'); renderAdminData(); }
+function adminAddToken() { const target = document.getElementById('adminTargetUser').value.trim(); const amount = parseInt(document.getElementById('adminAddToken').value); if (!target || !amount) return toast('Nhập thiếu thông tin'); if(!GLOBAL_DATA) return; if (!GLOBAL_DATA.users[target]) return toast('Không tìm thấy user!'); GLOBAL_DATA.users[target].tokens += amount; saveCloudData(); toast('Đã cộng token!'); }
+function adminChangePass() { const target = document.getElementById('adminChangeUser').value.trim(); const newP = document.getElementById('adminNewPass').value.trim(); if (!target || !newP) return toast('Nhập thiếu thông tin'); if(!GLOBAL_DATA) return; if (!GLOBAL_DATA.users[target]) return toast('Không tìm thấy user!'); GLOBAL_DATA.users[target].password = safeEncode(newP); saveCloudData(); toast('Đã đổi pass!'); }
 function closeOutToken() { document.getElementById('outTokenOverlay').classList.add('hidden'); }
+function copyText(t) { navigator.clipboard.writeText(t); toast('Đã copy!'); }
+function applyBgColor(color) { document.body.style.background = color; document.getElementById('mainArea').style.background = 'radial-gradient(circle at 50% 0%, ' + color + ', #050308 100%)'; document.getElementById('sidebar').style.background = 'linear-gradient(180deg, ' + color + ', #08080c)'; }
 
-// Khởi chạy
+// KHỞI CHẠY TỐI ƯU
 window.onload = async () => {
   createSnow();
   applyBgColor(LocalDB.bgcolor.get());
-  const data = await CloudDB.get();
-  if (data && !data.users[ADMIN_USER]) {
-    data.users[ADMIN_USER] = { password: safeEncode(ADMIN_PASS), tokens: 999999999, isAdmin: true, createdAt: Date.now() };
-    await CloudDB.set(data);
-  }
+  await loadCloudData(); // Tải trước dữ liệu từ mây vào bộ nhớ đệm
   const sess = LocalDB.session.get();
   if (sess) startApp(sess);
 };
